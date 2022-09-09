@@ -12,7 +12,9 @@ pipeline {
         stage ('Code Quality') {
           stages {
             stage('Code Quality Check') {
-              sh 'echo "Scanner code"'
+              steps {
+                sh 'echo "Scanner code"'              
+              }
             }
           }
         }

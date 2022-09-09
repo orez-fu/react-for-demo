@@ -12,28 +12,8 @@ pipeline {
         stage ('Code Quality') {
           stages {
             stage('Code Quality Check') {
-              agent {
-                docker {
-                  image 'gradle:jdk8-alpine'
-                  label 'linux-slave'
-                }
-              }
-
               steps {
-                script{
-                  def scannerHome = tool 'sonar_scanner';
-                  withSonarQubeEnv('sonar') {
-                      sh "${scannerHome}/bin/sonar-scanner \
-                          -Dsonar.projectKey=color-app \
-                          -Dsonar.projectName=color-app \
-                          -Dsonar.host.url=${SONAR_HOST_URL}"
-                  }
-                }
-              }
-            }
-            stage("Quality gate") {
-              steps {
-                waitForQualityGate abortPipeline: true
+                sh 'echo "Scanner code"'              
               }
             }
           }

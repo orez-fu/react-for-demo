@@ -19,6 +19,7 @@ background: ${props => `rgb(${props.red},${props.green},${props.blue})`};
 function LabeledSlider(props) {
   return (
     <div>
+<h1> Color Title </h1>
       <ColorLabel>{props.label}:</ColorLabel>
       <input
         type="range"

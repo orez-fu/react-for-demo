@@ -7,48 +7,31 @@ pipeline {
   }
 
   stages {
-    stage ('Integration Code') {
-      parallel {
-        stage ('Code Quality') {
-          stages {
-            stage('Code Quality Check') {
-              steps {
-                sh 'echo "Scanner code"'              
-              }
-            }
-          }
-        }
-
-        stage ('Code Testing') {
-          stages {
-            stage ('Install Dependencies') {
-              tools {
-                nodejs 'nodejs 8.9.4'
-              }
-              steps {
-                sh '''
-                  echo "Installing..."
-                  npm install
-                  echo "Install dependencies successfully."
-                  ls -al
-                '''
-              }
-            }
-            stage ('Test') {
-              tools {
-                nodejs 'nodejs 8.9.4'
-              }
-              steps {
-                sh 'echo "Run unit test..."'
-                sh 'npm test'
-                sh 'echo "Run unit test successfully."'
-                sh 'ls -al'
-              }
-            }
-          }
-        }
+    stage ('Install Dependencies') {
+      tools {
+	nodejs 'nodejs 8.9.4'
+      }
+      steps {
+	sh '''
+	  echo "Installing..."
+	  npm install
+	  echo "Install dependencies successfully."
+	  ls -al
+	'''
       }
     }
+    stage ('Test') {
+      tools {
+	nodejs 'nodejs 8.9.4'
+      }
+      steps {
+	sh 'echo "Run unit test..."'
+	sh 'npm test'
+	sh 'echo "Run unit test successfully."'
+	sh 'ls -al'
+       }
+     }
+
 
     stage ('Build') {
       when {

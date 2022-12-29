@@ -1,43 +1,46 @@
 pipeline {
-  agent any
-  // agent {
-    // node {
-    //   label 'my-label'
-    // }
-  // }
-  stages {
-    stage('Checkout source code') {
-      steps {
-        git branch: 'master',
-        credentialsId: 'jenkins_github_pat',
-        url: 'https://github.com/HoangPhu98/react-for-demo.git'
-        sh "ls -la"
-      }
-    }
+  agent { label 'linux-slave' }
+  environment {
+    DOCKER_REGISTRY_NAME        = credentials('DOCKER_REGISTRY_NAME')
+    DOCKER_REGISTRY_USERNAME    = credentials('DOCKER_REGISTRY_USERNAME')
+    DOCKER_REGISTRY_PASSWORD    = credentials('DOCKER_REGISTRY_PASSWORD')
+  }
 
-    stage ('Install dependencies') {
+  stages {
+    stage ('Install Dependencies') {
+      tools {
+	nodejs 'nodejs 8.9.4'
+      }
       steps {
-        nodejs(nodeJSInstallationName: 'nodejs 8.9.4') {
-          sh 'echo "Installing..."'
-          sh 'npm install'
-          sh 'echo "Install dependencies successfully."'
-          sh 'ls -al'
-        }
+	sh '''
+	  echo "Installing..."
+	  npm install
+	  echo "Install dependencies successfully."
+	  ls -al
+	'''
       }
     }
-    
     stage ('Test') {
-      steps {
-        nodejs(nodeJSInstallationName: 'nodejs 8.9.4') {
-          sh 'echo "Run unit test..."'
-          sh 'npm test'
-          sh 'echo "Run unit test successfully."'
-          sh 'ls -al'
-        }
+      tools {
+	nodejs 'nodejs 8.9.4'
       }
-    }
+      steps {
+	sh 'echo "Run unit test..."'
+	sh 'npm test'
+	sh 'echo "Run unit test successfully."'
+	sh 'ls -al'
+       }
+     }
+
 
     stage ('Build') {
+      when {
+        anyOf {
+            branch 'develop'
+            branch 'release'
+            tag pattern: "^v(\\d+(?:\\.\\d+)*)\$", comparator: "REGEXP"
+        }
+      }
       steps {
         nodejs(nodeJSInstallationName: 'nodejs 8.9.4') {
           sh 'echo "Build application..."'
@@ -51,17 +54,94 @@ pipeline {
       }
     }
 
-    stage ('Create docker images') {
-      agent any
+    stage ('Create docker images - DEV/STG') {
+      when {
+        anyOf {
+          branch 'develop'
+          branch 'release'
+        }
+      }
       steps {
         script {
           unstash 'build'
         }
         sh '''
           ls -al
-          echo "Starting to build docker image"
-          docker build -t pick-color:v1 -f docker/Dockerfile.no_build .
+          echo "Starting to build docker image for dev env"
+          docker build -t "${DOCKER_REGISTRY_NAME}/pick-color:${BRANCH_NAME}-${BUILD_NUMBER}" -f docker/Dockerfile.no_build .
+        '''
+        // Push image to hub.docker.com
+        // echo ${DOCKER_REGISTRY_PASSWORD} | docker login -u ${DOCKER_REGISTRY_USERNAME} --password-stdin  
+        sh '''
+          docker login -u ${DOCKER_REGISTRY_USERNAME} --password ${DOCKER_REGISTRY_PASSWORD}
+          docker push "${DOCKER_REGISTRY_NAME}/pick-color:${BRANCH_NAME}-${BUILD_NUMBER}"
+        '''
+      }
+    }
 
+    stage ('Deploy app - DEV') {
+      when {
+        branch 'develop'
+      }
+      steps {
+        sh '''
+          docker stop color-app-dev || true && docker rm color-app-dev || true
+          docker run -p 30080:80 --restart always -d --name color-app-dev ${DOCKER_REGISTRY_NAME}/pick-color:${BRANCH_NAME}-${BUILD_NUMBER} 
+        '''
+      }
+    }
+
+    stage ('Deploy app - STG') {
+      when {
+        branch 'release'
+      }
+      steps {
+        sh '''
+          docker stop color-app-stg || true && docker rm color-app-stg || true
+          docker run -p 30090:80 --restart always -d --name color-app-stg ${DOCKER_REGISTRY_NAME}/pick-color:${BRANCH_NAME}-${BUILD_NUMBER} 
+        '''
+      }
+    }
+    
+    stage ('Create docker images - PRD') {
+      when { 
+        tag pattern: "^v(\\d+(?:\\.\\d+)*)\$", comparator: "REGEXP"
+      }
+      steps {
+        script {
+          unstash 'build'
+        }
+
+        // Create image step
+        sh '''
+          ls -al
+          echo "Starting to build docker image, prepare for release"
+          docker build -t "${DOCKER_REGISTRY_NAME}/pick-color:${TAG_NAME}" -f docker/Dockerfile.no_build .
+        '''
+        // Push image step
+        sh '''
+          docker login -u ${DOCKER_REGISTRY_USERNAME} --password ${DOCKER_REGISTRY_PASSWORD}
+          docker push "${DOCKER_REGISTRY_NAME}/pick-color:${TAG_NAME}"
+        '''
+      }
+    }
+
+    stage ('Deploy app - PRD') {
+      when { 
+        beforeInput true
+        tag pattern: "^v(\\d+(?:\\.\\d+)*)\$", comparator: "REGEXP"
+      }
+      input {
+        message 'Approve to deploy PRD?'
+        ok "Done"
+        // parameters {
+        //   booleanParam(name: 'APPROVED', defaultValue: false, description: 'Are you approve to deploy Application on PRD environment?')
+        // }
+      }
+      steps {
+        sh '''
+          docker stop color-app-prd || true && docker rm color-app-prd || true
+          docker run -p 30800:80 --restart always -d --name color-app-prd ${DOCKER_REGISTRY_NAME}/pick-color:${TAG_NAME}
         '''
       }
     }
